@@ -6,8 +6,16 @@ export default async function handler(req, res) {
 
   const { tsc, ctrl } = req.body;
 
-  if (!tsc || typeof tsc !== 'string') {
-    return res.status(400).json({ error: 'Missing or invalid TSC value' });
+  const VALID_TSC = [
+    'Security (CC)',
+    'Availability (A)',
+    'Processing Integrity (PI)',
+    'Confidentiality (C)',
+    'Privacy (P)'
+  ];
+
+  if (!tsc || !VALID_TSC.includes(tsc)) {
+    return res.status(400).json({ error: 'Invalid TSC value' });
   }
 
   const ctrlContext = ctrl
