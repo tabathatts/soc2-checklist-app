@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SOC 2 Audit Checklist Generator</title>
+  <script
+    async
+    crossorigin="anonymous"
+    data-clerk-publishable-key="pk_test_YXJ0aXN0aWMtcmVkYmlyZC01OC5jbGVyay5hY2NvdW50cy5kZXYk"
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+    type="text/javascript"
+  ></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f8f7; color: #1a1a1a; padding: 2rem; min-height: 100vh; }
@@ -50,43 +57,115 @@
     .notes-area textarea { width: 100%; font-size: 13px; border-radius: 6px; border: 1px solid #ddd; background: #fafafa; color: #1a1a1a; padding: 6px 8px; resize: vertical; min-height: 56px; font-family: inherit; line-height: 1.5; }
     .saved-indicator { font-size: 11px; color: #16a34a; }
     .error-msg { color: #dc2626; font-size: 14px; }
+    #auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
+    #auth-screen h2 { font-size: 20px; font-weight: 500; margin-bottom: 8px; }
+    #auth-screen p { font-size: 14px; color: #666; margin-bottom: 1.5rem; }
+    #sign-in-btn { height: 38px; padding: 0 24px; border-radius: 8px; border: 1px solid #ddd; background: #1a1a1a; color: #fff; font-size: 14px; cursor: pointer; }
+    #sign-in-btn:hover { background: #333; }
+    #user-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 1rem; }
+    #user-bar span { font-size: 13px; color: #666; }
+    #sign-out-btn { font-size: 13px; color: #3b82f6; background: none; border: none; cursor: pointer; padding: 0; }
+    #app-content { display: none; }
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1 class="app-title">SOC 2 Audit Checklist Generator</h1>
-  <p class="app-sub">Checklists auto-save as you work. Notes and completion status persist across sessions.</p>
-  <div class="controls">
-    <div class="field">
-      <label for="tsc-sel">Trust Services Criteria</label>
-      <select id="tsc-sel" onchange="document.getElementById('gen-btn').disabled = !this.value">
-        <option value="">— select criteria —</option>
-        <option value="Security (CC)">Security — Common Criteria (CC)</option>
-        <option value="Availability (A)">Availability (A)</option>
-        <option value="Processing Integrity (PI)">Processing Integrity (PI)</option>
-        <option value="Confidentiality (C)">Confidentiality (C)</option>
-        <option value="Privacy (P)">Privacy (P)</option>
-      </select>
+
+  <!-- Auth screen shown to logged out users -->
+  <div id="auth-screen">
+    <h2>SOC 2 Audit Checklist Generator</h2>
+    <p>Please sign in to access the checklist generator.</p>
+    <button id="sign-in-btn">Sign in</button>
+  </div>
+
+  <!-- App shown to logged in users -->
+  <div id="app-content">
+    <div id="user-bar">
+      <span id="user-email"></span>
+      <button id="sign-out-btn">Sign out</button>
     </div>
-    <div class="field">
-      <label for="ctrl-sel">Control type</label>
-      <select id="ctrl-sel">
-        <option value="">— all types —</option>
-        <option value="Preventive">Preventive</option>
-        <option value="Detective">Detective</option>
-        <option value="Corrective">Corrective</option>
-      </select>
+    <h1 class="app-title">SOC 2 Audit Checklist Generator</h1>
+    <p class="app-sub">Checklists auto-save as you work. Notes and completion status persist across sessions.</p>
+    <div class="controls">
+      <div class="field">
+        <label for="tsc-sel">Trust Services Criteria</label>
+        <select id="tsc-sel" onchange="document.getElementById('gen-btn').disabled = !this.value">
+          <option value="">— select criteria —</option>
+          <option value="Security (CC)">Security — Common Criteria (CC)</option>
+          <option value="Availability (A)">Availability (A)</option>
+          <option value="Processing Integrity (PI)">Processing Integrity (PI)</option>
+          <option value="Confidentiality (C)">Confidentiality (C)</option>
+          <option value="Privacy (P)">Privacy (P)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="ctrl-sel">Control type</label>
+        <select id="ctrl-sel">
+          <option value="">— all types —</option>
+          <option value="Preventive">Preventive</option>
+          <option value="Detective">Detective</option>
+          <option value="Corrective">Corrective</option>
+        </select>
+      </div>
+      <div class="field" style="flex:0">
+        <label>&nbsp;</label>
+        <button class="gen-btn" id="gen-btn" disabled onclick="generate()">Generate</button>
+      </div>
     </div>
-    <div class="field" style="flex:0">
-      <label>&nbsp;</label>
-      <button class="gen-btn" id="gen-btn" disabled onclick="generate()">Generate</button>
+    <div class="output" id="output">
+      <p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>
     </div>
   </div>
-  <div class="output" id="output">
-    <p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>
-  </div>
+
 </div>
+
 <script>
+  window.addEventListener('load', async function() {
+    await window.Clerk.load();
+
+    const authScreen = document.getElementById('auth-screen');
+    const appContent = document.getElementById('app-content');
+    const userEmail = document.getElementById('user-email');
+
+    function showApp(user) {
+      authScreen.style.display = 'none';
+      appContent.style.display = 'block';
+      userEmail.textContent = user.primaryEmailAddress?.emailAddress || '';
+      const saved = loadState();
+      if (saved && saved.data) {
+        window._tsc = saved.tsc; window._ctrl = saved.ctrl;
+        if (saved.tsc) document.getElementById('tsc-sel').value = saved.tsc;
+        if (saved.ctrl) document.getElementById('ctrl-sel').value = saved.ctrl;
+        document.getElementById('gen-btn').disabled = !saved.tsc;
+        renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
+      }
+    }
+
+    function showAuth() {
+      authScreen.style.display = 'flex';
+      appContent.style.display = 'none';
+    }
+
+    if (window.Clerk.user) {
+      showApp(window.Clerk.user);
+    } else {
+      showAuth();
+    }
+
+    document.getElementById('sign-in-btn').addEventListener('click', () => {
+      window.Clerk.openSignIn();
+    });
+
+    document.getElementById('sign-out-btn').addEventListener('click', async () => {
+      await window.Clerk.signOut();
+      showAuth();
+    });
+
+    window.Clerk.addListener(({ user }) => {
+      if (user) { showApp(user); } else { showAuth(); }
+    });
+  });
+
   const STORE_KEY = 'soc2_checklist_v2';
   function saveState() {
     const state = { tsc: window._tsc, ctrl: window._ctrl, data: window._data, checks: window._checks, notes: window._notes };
@@ -213,14 +292,6 @@
     a.click();
   }
   window._checks = {}; window._notes = {};
-  const saved = loadState();
-  if (saved && saved.data) {
-    window._tsc = saved.tsc; window._ctrl = saved.ctrl;
-    if (saved.tsc) document.getElementById('tsc-sel').value = saved.tsc;
-    if (saved.ctrl) document.getElementById('ctrl-sel').value = saved.ctrl;
-    document.getElementById('gen-btn').disabled = !saved.tsc;
-    renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
-  }
 </script>
 </body>
 </html>
