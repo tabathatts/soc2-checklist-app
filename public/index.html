@@ -134,20 +134,16 @@
       document.getElementById('password-screen').style.display = 'none';
       document.getElementById('app-content').style.display = 'block';
       error.style.display = 'none';
-      const saved = loadState();
-      if (saved && saved.data) {
-        window._tsc = saved.tsc; window._ctrl = saved.ctrl;
-        if (saved.tsc) document.getElementById('tsc-sel').value = saved.tsc;
-        if (saved.ctrl) document.getElementById('ctrl-sel').value = saved.ctrl;
-        document.getElementById('gen-btn').disabled = !saved.tsc;
-        renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
-      }
+      clearState();
+      document.getElementById('tsc-sel').value = '';
+      document.getElementById('ctrl-sel').value = '';
+      document.getElementById('gen-btn').disabled = true;
+      document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
     } else {
       error.style.display = 'block';
       document.getElementById('pwd-input').value = '';
     }
   }
-
   function signOut() {
     sessionStorage.removeItem('soc2_auth');
     document.getElementById('password-screen').style.display = 'flex';
