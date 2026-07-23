@@ -4,13 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SOC 2 Audit Checklist Generator</title>
-  <script
-    async
-    crossorigin="anonymous"
-    data-clerk-publishable-key="pk_test_YXJ0aXN0aWMtcmVkYmlyZC01OC5jbGVyay5hY2NvdW50cy5kZXYk"
-    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
-    type="text/javascript"
-  ></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f8f7; color: #1a1a1a; padding: 2rem; min-height: 100vh; }
@@ -57,32 +50,43 @@
     .notes-area textarea { width: 100%; font-size: 13px; border-radius: 6px; border: 1px solid #ddd; background: #fafafa; color: #1a1a1a; padding: 6px 8px; resize: vertical; min-height: 56px; font-family: inherit; line-height: 1.5; }
     .saved-indicator { font-size: 11px; color: #16a34a; }
     .error-msg { color: #dc2626; font-size: 14px; }
-    #auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
-    #auth-screen h2 { font-size: 20px; font-weight: 500; margin-bottom: 8px; }
-    #auth-screen p { font-size: 14px; color: #666; margin-bottom: 1.5rem; }
-    #sign-in-btn { height: 38px; padding: 0 24px; border-radius: 8px; border: 1px solid #ddd; background: #1a1a1a; color: #fff; font-size: 14px; cursor: pointer; }
-    #sign-in-btn:hover { background: #333; }
-    #user-bar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 1rem; }
-    #user-bar span { font-size: 13px; color: #666; }
-    #sign-out-btn { font-size: 13px; color: #3b82f6; background: none; border: none; cursor: pointer; padding: 0; }
+    #password-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; }
+    .password-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 2rem; width: 100%; max-width: 360px; text-align: center; }
+    .lock-icon { width: 44px; height: 44px; border-radius: 50%; background: #eff6ff; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; font-size: 20px; }
+    .password-box h2 { font-size: 18px; font-weight: 500; margin-bottom: 6px; }
+    .password-box p { font-size: 13px; color: #666; margin-bottom: 1.5rem; }
+    .password-box label { font-size: 12px; font-weight: 500; color: #555; display: block; text-align: left; margin-bottom: 5px; }
+    .password-box input { width: 100%; height: 36px; border-radius: 8px; border: 1px solid #ddd; background: #fafafa; color: #1a1a1a; padding: 0 10px; font-size: 14px; margin-bottom: 1rem; }
+    .password-box button { width: 100%; height: 36px; border-radius: 8px; border: none; background: #1a1a1a; color: #fff; font-size: 14px; cursor: pointer; }
+    .password-box button:hover { background: #333; }
+    .password-error { color: #dc2626; font-size: 13px; margin-top: 10px; display: none; }
+    .password-hint { font-size: 12px; color: #aaa; margin-top: 1rem; }
     #app-content { display: none; }
+    #user-bar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+    #sign-out-btn { font-size: 13px; color: #3b82f6; background: none; border: none; cursor: pointer; padding: 0; }
   </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- Auth screen shown to logged out users -->
-  <div id="auth-screen">
-    <h2>SOC 2 Audit Checklist Generator</h2>
-    <p>Please sign in to access the checklist generator.</p>
-    <button id="sign-in-btn">Sign in</button>
+  <!-- Password screen -->
+  <div id="password-screen">
+    <div class="password-box">
+      <div class="lock-icon">🔒</div>
+      <h2>SOC 2 Audit Checklist</h2>
+      <p>Enter your password to access this tool.</p>
+      <label for="pwd-input">Password</label>
+      <input type="password" id="pwd-input" placeholder="Enter password" onkeydown="if(event.key==='Enter') checkPassword()" />
+      <button onclick="checkPassword()">Access app</button>
+      <p class="password-error" id="pwd-error">Incorrect password. Please try again.</p>
+      <p class="password-hint">Don't have a password? Contact the administrator.</p>
+    </div>
   </div>
 
-  <!-- App shown to logged in users -->
+  <!-- App content shown after correct password -->
   <div id="app-content">
     <div id="user-bar">
-      <span id="user-email"></span>
-      <button id="sign-out-btn">Sign out</button>
+      <button id="sign-out-btn" onclick="signOut()">Sign out</button>
     </div>
     <h1 class="app-title">SOC 2 Audit Checklist Generator</h1>
     <p class="app-sub">Checklists auto-save as you work. Notes and completion status persist across sessions.</p>
@@ -120,17 +124,16 @@
 </div>
 
 <script>
-  window.addEventListener('load', async function() {
-    await window.Clerk.load();
+  const APP_PASSWORD = 'SOC2audit2024';
 
-    const authScreen = document.getElementById('auth-screen');
-    const appContent = document.getElementById('app-content');
-    const userEmail = document.getElementById('user-email');
-
-    function showApp(user) {
-      authScreen.style.display = 'none';
-      appContent.style.display = 'block';
-      userEmail.textContent = user.primaryEmailAddress?.emailAddress || '';
+  function checkPassword() {
+    const input = document.getElementById('pwd-input').value;
+    const error = document.getElementById('pwd-error');
+    if (input === APP_PASSWORD) {
+      sessionStorage.setItem('soc2_auth', 'true');
+      document.getElementById('password-screen').style.display = 'none';
+      document.getElementById('app-content').style.display = 'block';
+      error.style.display = 'none';
       const saved = loadState();
       if (saved && saved.data) {
         window._tsc = saved.tsc; window._ctrl = saved.ctrl;
@@ -139,32 +142,29 @@
         document.getElementById('gen-btn').disabled = !saved.tsc;
         renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
       }
-    }
-
-    function showAuth() {
-      authScreen.style.display = 'flex';
-      appContent.style.display = 'none';
-    }
-
-    if (window.Clerk.user) {
-      showApp(window.Clerk.user);
     } else {
-      showAuth();
+      error.style.display = 'block';
+      document.getElementById('pwd-input').value = '';
     }
+  }
 
-    document.getElementById('sign-in-btn').addEventListener('click', () => {
-      window.Clerk.openSignIn();
-    });
+  function signOut() {
+    sessionStorage.removeItem('soc2_auth');
+    document.getElementById('password-screen').style.display = 'flex';
+    document.getElementById('app-content').style.display = 'none';
+  }
 
-    document.getElementById('sign-out-btn').addEventListener('click', async () => {
-      await window.Clerk.signOut();
-      showAuth();
-    });
-
-    window.Clerk.addListener(({ user }) => {
-      if (user) { showApp(user); } else { showAuth(); }
-    });
-  });
+  if (sessionStorage.getItem('soc2_auth') === 'true') {
+    document.getElementById('password-screen').style.display = 'none';
+    document.getElementById('app-content').style.display = 'block';
+    const saved = loadState();
+    if (saved && saved.data) {
+      window._tsc = saved.tsc; window._ctrl = saved.ctrl;
+      if (saved.tsc) document.getElementById('tsc-sel').value = saved.tsc;
+      if (saved.ctrl) document.getElementById('ctrl-sel').value = saved.ctrl;
+      document.getElementById('gen-btn').disabled = !saved.tsc;
+    }
+  }
 
   const STORE_KEY = 'soc2_checklist_v2';
   function saveState() {
