@@ -4,6 +4,36 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress || 'unknown';
+  const rateKey = `rate_limit:${ip}`;
+  const LIMIT = 10;
+  const WINDOW = 60 * 60;
+
+  try {
+    const countRes = await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/get/${rateKey}`, {
+      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
+    });
+    const countData = await countRes.json();
+    const currentCount = parseInt(countData.result) || 0;
+
+    if (currentCount >= LIMIT) {
+      return res.status(429).json({ error: 'Too many requests. You have reached the limit of 10 requests per hour. Please try again later.' });
+    }
+
+    await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/incr/${rateKey}`, {
+      headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
+    });
+
+    if (currentCount === 0) {
+      await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/expire/${rateKey}/${WINDOW}`, {
+        headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}` }
+      });
+    }
+
+  } catch(e) {
+    console.error('Rate limit check failed:', e);
+  }
+
   const { tsc, ctrl } = req.body;
 
   const VALID_TSC = [
