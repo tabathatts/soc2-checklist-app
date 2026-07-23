@@ -152,6 +152,8 @@
     sessionStorage.removeItem('soc2_auth');
     document.getElementById('password-screen').style.display = 'flex';
     document.getElementById('app-content').style.display = 'none';
+    document.getElementById('pwd-input').value = '';
+    document.getElementById('pwd-error').style.display = 'none';
   }
 
   if (sessionStorage.getItem('soc2_auth') === 'true') {
