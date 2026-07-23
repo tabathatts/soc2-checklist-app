@@ -1,3 +1,33 @@
+async function captureException(error, context) {
+  try {
+    const dsn = process.env.SENTRY_DSN;
+    if (!dsn) return;
+
+    const dsnMatch = dsn.match(/https:\/\/(.+)@(.+)\/(.+)/);
+    if (!dsnMatch) return;
+
+    const [, key, host, projectId] = dsnMatch;
+    const sentryUrl = `https://${host}/api/${projectId}/store/`;
+
+    await fetch(sentryUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sentry-Auth': `Sentry sentry_version=7, sentry_key=${key}`
+      },
+      body: JSON.stringify({
+        platform: 'node',
+        level: 'error',
+        message: error.message || String(error),
+        extra: context || {},
+        timestamp: new Date().toISOString()
+      })
+    });
+  } catch(e) {
+    console.error('Sentry reporting failed:', e);
+  }
+}
+
 export default async function handler(req, res) {
 
   if (req.method !== 'POST') {
@@ -32,6 +62,7 @@ export default async function handler(req, res) {
 
   } catch(e) {
     console.error('Rate limit check failed:', e);
+    await captureException(e, { step: 'rate_limit_check' });
   }
 
   const { tsc, ctrl } = req.body;
@@ -88,6 +119,7 @@ Requirements:
 
   } catch (err) {
     console.error('API error:', err);
+    await captureException(err, { step: 'anthropic_api_call', tsc, ctrl });
     res.status(500).json({ error: 'Failed to generate checklist' });
   }
 }
