@@ -76,7 +76,8 @@
       <h2>SOC 2 Audit Checklist</h2>
       <p>Enter your password to access this tool.</p>
       <label for="pwd-input">Password</label>
-      <input type="password" id="pwd-input" placeholder="Enter password" onkeydown="if(event.key==='Enter') checkPassword()" />
+      <input type="email" id="email-input" placeholder="Enter your email" onkeydown="if(event.key==='Enter') checkPassword()" style="margin-bottom: 1rem;" />
+<input type="password" id="pwd-input" placeholder="Enter password" onkeydown="if(event.key==='Enter') checkPassword()" />
       <button onclick="checkPassword()">Access app</button>
       <p class="password-error" id="pwd-error">Incorrect password. Please try again.</p>
       <p class="password-hint">Don't have a password? Contact the administrator.</p>
@@ -124,25 +125,35 @@
 </div>
 
 <script>
-  const APP_PASSWORD = 'SOC2audit2024';
+ function checkPassword() {
+  const emailInput = document.getElementById('email-input').value.trim();
+  const input = document.getElementById('pwd-input').value;
+  const error = document.getElementById('pwd-error');
 
-  function checkPassword() {
-    const input = document.getElementById('pwd-input').value;
-    const error = document.getElementById('pwd-error');
-    if (input === APP_PASSWORD) {
-      sessionStorage.setItem('soc2_auth', 'true');
-      document.getElementById('password-screen').style.display = 'none';
-      document.getElementById('app-content').style.display = 'block';
-      error.style.display = 'none';
-      clearState();
-      document.getElementById('tsc-sel').value = '';
-      document.getElementById('ctrl-sel').value = '';
-      document.getElementById('gen-btn').disabled = true;
-      document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
-    } else {
-      error.style.display = 'block';
-      document.getElementById('pwd-input').value = '';
-    }
+  if (!emailInput || !emailInput.includes('@')) {
+    error.textContent = 'Please enter a valid email address.';
+    error.style.display = 'block';
+    return;
+  }
+
+  if (input === APP_PASSWORD) {
+    const normalizedEmail = emailInput.toLowerCase();
+    sessionStorage.setItem('soc2_auth', 'true');
+    sessionStorage.setItem('soc2_email', normalizedEmail);
+    document.getElementById('password-screen').style.display = 'none';
+    document.getElementById('app-content').style.display = 'block';
+    error.style.display = 'none';
+    clearState();
+    document.getElementById('tsc-sel').value = '';
+    document.getElementById('ctrl-sel').value = '';
+    document.getElementById('gen-btn').disabled = true;
+    document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
+  } else {
+    error.textContent = 'Incorrect password. Please try again.';
+    error.style.display = 'block';
+    document.getElementById('pwd-input').value = '';
+  }
+}
   }
   function signOut() {
     sessionStorage.removeItem('soc2_auth');
