@@ -17,10 +17,7 @@ async function captureException(error, context) {
 async function redisCommand(args) {
   const res = await fetch(process.env.UPSTASH_REDIS_REST_URL, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
+    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(args)
   });
   return res.json();
@@ -34,7 +31,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { email, auditId, checklistItems, label } = req.body;
+  const { email, auditId, label, tsc, ctrl, data, checks, notes } = req.body;
 
   if (!email || !auditId) {
     return res.status(400).json({ error: 'Email and auditId are required' });
@@ -50,16 +47,18 @@ export default async function handler(req, res) {
     }
 
     const existing = JSON.parse(existingRes.result);
-
     const updated = {
       ...existing,
       label: label || existing.label,
-      checklistItems: checklistItems || existing.checklistItems,
+      tsc: tsc !== undefined ? tsc : existing.tsc,
+      ctrl: ctrl !== undefined ? ctrl : existing.ctrl,
+      data: data !== undefined ? data : existing.data,
+      checks: checks !== undefined ? checks : existing.checks,
+      notes: notes !== undefined ? notes : existing.notes,
       lastUpdated: new Date().toISOString()
     };
 
     await redisCommand(['SET', auditKey, JSON.stringify(updated)]);
-
     res.status(200).json({ audit: updated });
   } catch (err) {
     console.error('Save audit error:', err);
