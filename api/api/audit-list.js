@@ -26,10 +26,11 @@ async function redisCommand(args) {
   return res.json();
 }
 
-function percentComplete(checklistItems) {
-  if (!checklistItems || checklistItems.length === 0) return 0;
-  const done = checklistItems.filter(i => i.status === 'complete').length;
-  return Math.round((done / checklistItems.length) * 100);
+function percentComplete(checks) {
+  const keys = Object.keys(checks || {});
+  if (keys.length === 0) return 0;
+  const done = keys.filter(k => checks[k]).length;
+  return Math.round((done / keys.length) * 100);
 }
 
 export default async function handler(req, res) {
@@ -57,12 +58,12 @@ export default async function handler(req, res) {
         const r = await redisCommand(['GET', `audit:${normalizedEmail}:${auditId}`]);
         if (!r.result) return null;
         const audit = JSON.parse(r.result);
-        return {
+       return {
           auditId: audit.auditId,
           label: audit.label,
-          framework: audit.framework,
+          tsc: audit.tsc,
           lastUpdated: audit.lastUpdated,
-          percentComplete: percentComplete(audit.checklistItems)
+          percentComplete: percentComplete(audit.checks)
         };
       })
     );
