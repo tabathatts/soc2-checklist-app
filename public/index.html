@@ -125,7 +125,8 @@
 </div>
 
 <script>
- function checkPassword() {
+  const APP_PASSWORD = 'SOC2audit2024';
+  function checkPassword() {
   const emailInput = document.getElementById('email-input').value.trim();
   const input = document.getElementById('pwd-input').value;
   const error = document.getElementById('pwd-error');
@@ -154,7 +155,6 @@
     document.getElementById('pwd-input').value = '';
   }
 }
-  }
   function signOut() {
     sessionStorage.removeItem('soc2_auth');
     sessionStorage.removeItem('soc2_email');
