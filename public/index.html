@@ -157,36 +157,64 @@
   }
   function signOut() {
     sessionStorage.removeItem('soc2_auth');
+    sessionStorage.removeItem('soc2_email');
+    sessionStorage.removeItem('soc2_current_audit_id');
     document.getElementById('password-screen').style.display = 'flex';
     document.getElementById('app-content').style.display = 'none';
     document.getElementById('pwd-input').value = '';
     document.getElementById('pwd-error').style.display = 'none';
   }
 
-  if (sessionStorage.getItem('soc2_auth') === 'true') {
-    document.getElementById('password-screen').style.display = 'none';
-    document.getElementById('app-content').style.display = 'block';
-    const saved = loadState();
-    if (saved && saved.data) {
-      window._tsc = saved.tsc; window._ctrl = saved.ctrl;
-      if (saved.tsc) document.getElementById('tsc-sel').value = saved.tsc;
-      if (saved.ctrl) document.getElementById('ctrl-sel').value = saved.ctrl;
-      document.getElementById('gen-btn').disabled = !saved.tsc;
-    }
+  function getEmail() { return sessionStorage.getItem('soc2_email'); }
+  function getCurrentAuditId() { return sessionStorage.getItem('soc2_current_audit_id'); }
+  function setCurrentAuditId(id) { sessionStorage.setItem('soc2_current_audit_id', id); }
+
+  async function loadCurrentAudit() {
+    const auditId = getCurrentAuditId();
+    const email = getEmail();
+    if (!auditId || !email) return null;
+    try {
+      const res = await fetch('/api/audit-load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, auditId })
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.audit;
+    } catch(e) { console.error('Load failed', e); return null; }
   }
 
-  const STORE_KEY = 'soc2_checklist_v2';
-  function saveState() {
-    const state = { tsc: window._tsc, ctrl: window._ctrl, data: window._data, checks: window._checks, notes: window._notes };
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e) {}
+  async function initSession() {
+    if (sessionStorage.getItem('soc2_auth') !== 'true') return;
+    document.getElementById('password-screen').style.display = 'none';
+    document.getElementById('app-content').style.display = 'block';
+    const saved = await loadCurrentAudit();
+    if (saved && saved.data) {
+      document.getElementById('tsc-sel').value = saved.tsc || '';
+      document.getElementById('ctrl-sel').value = saved.ctrl || '';
+      document.getElementById('gen-btn').disabled = !saved.tsc;
+      renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
+    }
   }
-  function loadState() {
-    try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch(e) { return null; }
+  initSession();
+
+  async function saveState() {
+    const auditId = getCurrentAuditId();
+    const email = getEmail();
+    if (!auditId || !email) return;
+    try {
+      await fetch('/api/audit-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, auditId, tsc: window._tsc, ctrl: window._ctrl, data: window._data, checks: window._checks, notes: window._notes })
+      });
+    } catch(e) { console.error('Save failed', e); }
   }
   function clearState() {
-    try { localStorage.removeItem(STORE_KEY); } catch(e) {}
     window._data = null; window._checks = {}; window._notes = {};
     document.getElementById('output').innerHTML = '<p class="placeholder">Checklist cleared. Select a criteria to start fresh.</p>';
+    saveState();
   }
   function controlBadgeClass(ctrl) {
     if (ctrl === 'Preventive') return 'badge badge-prev';
@@ -265,11 +293,31 @@
     const tsc = document.getElementById('tsc-sel').value;
     const ctrl = document.getElementById('ctrl-sel').value;
     if (!tsc) return;
+
+    let auditId = getCurrentAuditId();
+    if (!auditId) {
+      const label = window.prompt('Name this audit (e.g. client name or audit period):');
+      if (!label) return;
+      try {
+        const res = await fetch('/api/audit-create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: getEmail(), label, tsc, ctrl, data: null, checks: {}, notes: {} })
+        });
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+        auditId = json.auditId;
+        setCurrentAuditId(auditId);
+      } catch(e) {
+        console.error('Failed to create audit', e);
+        alert('Could not start a new audit. Please try again.');
+        return;
+      }
+    }
+
     const btn = document.getElementById('gen-btn');
     btn.disabled = true;
     document.getElementById('output').innerHTML = '<p class="placeholder"><span class="spinner"></span>Generating checklist for ' + tsc + (ctrl ? ' — ' + ctrl + ' controls' : '') + '…</p>';
-    const ctrlContext = ctrl ? 'Focus specifically on ' + ctrl + ' controls — controls designed to ' + (ctrl === 'Preventive' ? 'prevent issues before they occur.' : ctrl === 'Detective' ? 'detect issues after they occur.' : 'correct and remediate issues after detection.') : 'Include a mix of preventive, detective, and corrective controls.';
-    const prompt = `You are a SOC 2 Type II audit expert. Generate a structured audit checklist for the "${tsc}" Trust Services Criteria. ${ctrlContext}\n\nReturn ONLY a JSON array with NO markdown, NO backticks, NO explanation. The structure must be exactly:\n[{"category":"Category Name","items":["Verify that...","Confirm that..."]}]\n\nRequirements:\n- 4 to 5 categories relevant to ${tsc}\n- 3 to 4 audit check items per category\n- Items must be specific, actionable auditor verification tasks\n- Base items on actual SOC 2 control requirements\n- Do not include any text outside the JSON array`;
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
