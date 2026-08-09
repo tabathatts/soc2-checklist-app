@@ -20,8 +20,23 @@
     .output { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 1.5rem; min-height: 100px; }
     .placeholder { color: #999; font-size: 14px; }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -3px; margin-right: 6px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .cl-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #eee; }
+   @keyframes spin { to { transform: rotate(360deg); } }
+    #audits-screen { margin-bottom: 1.5rem; }
+    .audits-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .audits-header h2 { font-size: 16px; font-weight: 500; }
+    .audit-card { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .audit-card-info { flex: 1; min-width: 0; }
+    .audit-card-label { font-size: 14px; font-weight: 500; margin-bottom: 3px; }
+    .audit-card-meta { font-size: 12px; color: #888; }
+    .audit-card-actions { display: flex; gap: 8px; }
+    .audit-card-actions button { height: 30px; padding: 0 12px; border-radius: 6px; border: 1px solid #ddd; background: #fff; font-size: 13px; cursor: pointer; }
+    .audit-card-actions button:hover { background: #f0f0f0; }
+    .audit-card-actions .delete-btn { color: #b91c1c; border-color: #fecaca; }
+    .audit-card-actions .delete-btn:hover { background: #fef2f2; }
+    .progress-pill { font-size: 12px; padding: 2px 9px; border-radius: 99px; background: #eff6ff; color: #1d4ed8; white-space: nowrap; }
+    .back-link { background: none; border: none; color: #555; font-size: 13px; cursor: pointer; margin-bottom: 1rem; padding: 0; }
+    .back-link:hover { color: #1a1a1a; text-decoration: underline; }
+    .cl-header {display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #eee; }
     .cl-title { font-size: 15px; font-weight: 500; }
     .cl-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
     .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; }
@@ -89,9 +104,20 @@
     <div id="user-bar">
       <button id="sign-out-btn" onclick="signOut()">Sign out</button>
     </div>
-    <h1 class="app-title">SOC 2 Audit Checklist Generator</h1>
+   <h1 class="app-title">SOC 2 Audit Checklist Generator</h1>
     <p class="app-sub">Checklists auto-save as you work. Notes and completion status persist across sessions.</p>
-    <div class="controls">
+
+    <div id="audits-screen">
+      <div class="audits-header">
+        <h2>My Audits</h2>
+        <button class="gen-btn" onclick="startNewAudit()">+ Start New Audit</button>
+      </div>
+      <div id="audits-list"><p class="placeholder">Loading your audits…</p></div>
+    </div>
+
+    <div id="checklist-screen" style="display:none;">
+      <button class="back-link" onclick="showAuditsList()">← Back to My Audits</button>
+      <div class="controls">
       <div class="field">
         <label for="tsc-sel">Trust Services Criteria</label>
         <select id="tsc-sel" onchange="document.getElementById('gen-btn').disabled = !this.value">
@@ -119,6 +145,7 @@
     </div>
     <div class="output" id="output">
       <p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>
+    </div>
     </div>
   </div>
 
@@ -148,7 +175,8 @@
     document.getElementById('tsc-sel').value = '';
     document.getElementById('ctrl-sel').value = '';
     document.getElementById('gen-btn').disabled = true;
-    document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
+   document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
+    showAuditsList();
   } else {
     error.textContent = 'Incorrect password. Please try again.';
     error.style.display = 'block';
@@ -169,33 +197,122 @@
   function getCurrentAuditId() { return sessionStorage.getItem('soc2_current_audit_id'); }
   function setCurrentAuditId(id) { sessionStorage.setItem('soc2_current_audit_id', id); }
 
-  async function loadCurrentAudit() {
-    const auditId = getCurrentAuditId();
+ async function fetchAuditsList() {
     const email = getEmail();
-    if (!auditId || !email) return null;
+    if (!email) return [];
+    try {
+      const res = await fetch('/api/audit-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const json = await res.json();
+      return json.audits || [];
+    } catch(e) { console.error('List failed', e); return []; }
+  }
+
+  async function showAuditsList() {
+    document.getElementById('checklist-screen').style.display = 'none';
+    document.getElementById('audits-screen').style.display = 'block';
+    const listEl = document.getElementById('audits-list');
+    listEl.innerHTML = '<p class="placeholder"><span class="spinner"></span>Loading your audits…</p>';
+    const audits = await fetchAuditsList();
+    if (audits.length === 0) {
+      listEl.innerHTML = '<p class="placeholder">No audits yet. Click "Start New Audit" to begin.</p>';
+      return;
+    }
+    listEl.innerHTML = audits.map(a => `
+      <div class="audit-card">
+        <div class="audit-card-info">
+          <div class="audit-card-label">${a.label}</div>
+          <div class="audit-card-meta">${a.tsc || 'No criteria set'} · Last updated ${new Date(a.lastUpdated).toLocaleDateString()}</div>
+        </div>
+        <span class="progress-pill">${a.percentComplete}% complete</span>
+        <div class="audit-card-actions">
+          <button onclick="resumeAudit('${a.auditId}')">Resume</button>
+          <button class="delete-btn" onclick="deleteAudit('${a.auditId}')">Delete</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function resumeAudit(auditId) {
+    setCurrentAuditId(auditId);
+    const email = getEmail();
     try {
       const res = await fetch('/api/audit-load', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, auditId })
       });
-      if (!res.ok) return null;
       const json = await res.json();
-      return json.audit;
-    } catch(e) { console.error('Load failed', e); return null; }
+      if (json.error) throw new Error(json.error);
+      const saved = json.audit;
+      document.getElementById('tsc-sel').value = saved.tsc || '';
+      document.getElementById('ctrl-sel').value = saved.ctrl || '';
+      document.getElementById('gen-btn').disabled = !saved.tsc;
+      if (saved.data) {
+        renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
+      } else {
+        document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
+      }
+      document.getElementById('audits-screen').style.display = 'none';
+      document.getElementById('checklist-screen').style.display = 'block';
+    } catch(e) {
+      console.error('Failed to resume audit', e);
+      alert('Could not load that audit. Please try again.');
+    }
+  }
+
+  async function startNewAudit() {
+    const label = window.prompt('Name this audit (e.g. client name or audit period):');
+    if (!label) return;
+    const email = getEmail();
+    try {
+      const res = await fetch('/api/audit-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, label, tsc: '', ctrl: '', data: null, checks: {}, notes: {} })
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setCurrentAuditId(json.auditId);
+      document.getElementById('tsc-sel').value = '';
+      document.getElementById('ctrl-sel').value = '';
+      document.getElementById('gen-btn').disabled = true;
+      document.getElementById('output').innerHTML = '<p class="placeholder">Select a criteria above and click Generate to build your checklist.</p>';
+      document.getElementById('audits-screen').style.display = 'none';
+      document.getElementById('checklist-screen').style.display = 'block';
+    } catch(e) {
+      console.error('Failed to create audit', e);
+      alert('Could not start a new audit. Please try again.');
+    }
+  }
+
+  async function deleteAudit(auditId) {
+    if (!confirm('Delete this audit? This cannot be undone.')) return;
+    const email = getEmail();
+    try {
+      await fetch('/api/audit-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, auditId })
+      });
+      if (getCurrentAuditId() === auditId) {
+        sessionStorage.removeItem('soc2_current_audit_id');
+      }
+      showAuditsList();
+    } catch(e) {
+      console.error('Failed to delete audit', e);
+      alert('Could not delete that audit. Please try again.');
+    }
   }
 
   async function initSession() {
     if (sessionStorage.getItem('soc2_auth') !== 'true') return;
     document.getElementById('password-screen').style.display = 'none';
     document.getElementById('app-content').style.display = 'block';
-    const saved = await loadCurrentAudit();
-    if (saved && saved.data) {
-      document.getElementById('tsc-sel').value = saved.tsc || '';
-      document.getElementById('ctrl-sel').value = saved.ctrl || '';
-      document.getElementById('gen-btn').disabled = !saved.tsc;
-      renderChecklist(saved.data, saved.tsc, saved.ctrl, saved.checks, saved.notes);
-    }
+    showAuditsList();
   }
   initSession();
 
@@ -294,25 +411,11 @@
     const ctrl = document.getElementById('ctrl-sel').value;
     if (!tsc) return;
 
-    let auditId = getCurrentAuditId();
+    const auditId = getCurrentAuditId();
     if (!auditId) {
-      const label = window.prompt('Name this audit (e.g. client name or audit period):');
-      if (!label) return;
-      try {
-        const res = await fetch('/api/audit-create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: getEmail(), label, tsc, ctrl, data: null, checks: {}, notes: {} })
-        });
-        const json = await res.json();
-        if (json.error) throw new Error(json.error);
-        auditId = json.auditId;
-        setCurrentAuditId(auditId);
-      } catch(e) {
-        console.error('Failed to create audit', e);
-        alert('Could not start a new audit. Please try again.');
-        return;
-      }
+      alert('Please start a new audit from My Audits first.');
+      showAuditsList();
+      return;
     }
 
     const btn = document.getElementById('gen-btn');
