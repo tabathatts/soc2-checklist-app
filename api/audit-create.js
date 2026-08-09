@@ -61,7 +61,7 @@ export default async function handler(req, res) {
   try {
     const setResult = await redisCommand(['SET', `audit:${normalizedEmail}:${auditId}`, JSON.stringify(auditRecord)]);
     const saddResult = await redisCommand(['SADD', `user:${normalizedEmail}:audits`, auditId]);
-    res.status(200).json({ auditId, audit: auditRecord, debug: { setResult, saddResult } });
+    res.status(200).json({ auditId, audit: auditRecord });
   } catch (err) {
     console.error('Create audit error:', err);
     await captureException(err, { step: 'audit_create', email: normalizedEmail });
